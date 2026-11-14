@@ -52,6 +52,7 @@ final class Library: ObservableObject {
     @Published var ffmpegPath: String?
     @Published var jsRuntime: String?
     @Published var installingTools = false
+    @Published var toolProgress: String?
 
     private let scheduler: LaneScheduler
     private var sessions: [String: YtDlpSession] = [:]
@@ -62,6 +63,8 @@ final class Library: ObservableObject {
     private let supportURL: URL
     private let settingsURL: URL
     private let historyURL: URL
+    private var toolFetch: ToolFetch?
+    private var toolSession: URLSession?
 
     init() {
         let base = flumpSupportDirectory()
@@ -86,7 +89,10 @@ final class Library: ObservableObject {
             await self?.download(id)
         }
         refreshTools()
-        Task { await self.updateYtDlpIfDue() }
+        Task {
+            await self.replaceBundledYtDlpIfNewer()
+            await self.updateYtDlpIfDue()
+        }
     }
 
     func missingToolIDs() -> [String] {
@@ -98,7 +104,10 @@ final class Library: ObservableObject {
 
     func refreshTools() {
         if let bundle = Bundle.main.resourceURL?.appendingPathComponent("yt-dlp").path {
-            _ = try? seedExecutable(from: bundle, to: flumpBinDirectory().appendingPathComponent("yt-dlp"))
+            let destination = flumpBinDirectory().appendingPathComponent("yt-dlp")
+            if (try? seedExecutable(from: bundle, to: destination)) == true {
+                writeYtDlpVersion(pinnedTool("yt-dlp")?.version)
+            }
         }
         ytDlpPath = locateTool("yt-dlp")
         ffmpegPath = locateTool("ffmpeg")
@@ -115,8 +124,12 @@ final class Library: ObservableObject {
         let ids = missingToolIDs()
         guard !installingTools, !ids.isEmpty else { return }
         installingTools = true
+        toolProgress = "Getting tools…"
         Task {
-            defer { installingTools = false }
+            defer {
+                installingTools = false
+                toolProgress = nil
+            }
             do {
                 for id in ids {
                     guard let tool = pinnedTool(id) else { continue }
@@ -548,7 +561,49 @@ final class Library: ObservableObject {
         guard code == 0 else { return }
         let text = String(Date().timeIntervalSince1970)
         try? text.write(to: stampURL, atomically: true, encoding: .utf8)
+        if let version = await Task.detached(priority: .utility, operation: { toolVersion(at: binary) }).value {
+            writeYtDlpVersion(version)
+        }
         refreshTools()
+    }
+
+    private func replaceBundledYtDlpIfNewer() async {
+        guard let bundle = Bundle.main.resourceURL?.appendingPathComponent("yt-dlp").path,
+              FileManager.default.isExecutableFile(atPath: bundle),
+              let sourceVersion = pinnedTool("yt-dlp")?.version else { return }
+        let destination = flumpBinDirectory().appendingPathComponent("yt-dlp")
+        guard FileManager.default.isExecutableFile(atPath: destination.path) else { return }
+        let installed: String?
+        if let cached = readYtDlpVersion() {
+            installed = cached
+        } else {
+            installed = await Task.detached(priority: .utility, operation: {
+                toolVersion(at: destination.path)
+            }).value
+        }
+        guard let installed else { return }
+        writeYtDlpVersion(installed)
+        guard (try? seedExecutable(
+            from: bundle,
+            to: destination,
+            sourceVersion: sourceVersion,
+            destinationVersion: installed
+        )) == true else { return }
+        writeYtDlpVersion(sourceVersion)
+        refreshTools()
+    }
+
+    private func readYtDlpVersion() -> String? {
+        let url = flumpBinDirectory().appendingPathComponent("yt-dlp.version")
+        let text = try? String(contentsOf: url, encoding: .utf8)
+        let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? trimmed : nil
+    }
+
+    private func writeYtDlpVersion(_ version: String?) {
+        guard let version, !version.isEmpty else { return }
+        let url = flumpBinDirectory().appendingPathComponent("yt-dlp.version")
+        try? version.write(to: url, atomically: true, encoding: .utf8)
     }
 
     private func readStamp(_ url: URL) -> Date? {
@@ -560,27 +615,60 @@ final class Library: ObservableObject {
     }
 
     private func fetchAndInstall(_ tool: PinnedTool) async throws {
-        guard let url = URL(string: tool.url) else { throw ToolError.archive }
-        var request = URLRequest(url: url, timeoutInterval: 180)
-        request.setValue("Flump", forHTTPHeaderField: "User-Agent")
-        let (data, response) = try await URLSession.shared.data(for: request)
-        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-            throw ToolError.network
-        }
+        let label = tool.id == "deno" ? "Deno" : tool.id
         let destination = flumpBinDirectory().appendingPathComponent(tool.id)
         let sha = tool.sha256
         let entry = tool.zipEntry
         let entrySHA = tool.entrySHA256
-        try await Task.detached(priority: .utility) {
-            try installDownloadedTool(
-                data: data,
-                sha256: sha,
-                zipEntry: entry,
-                entrySHA256: entrySHA,
-                destination: destination
+        var lastError: Error = ToolError.network
+        for urlString in tool.urls {
+            guard let url = URL(string: urlString) else { continue }
+            do {
+                let data = try await downloadTool(from: url, label: label)
+                try await Task.detached(priority: .utility) {
+                    try installDownloadedTool(
+                        data: data,
+                        sha256: sha,
+                        zipEntry: entry,
+                        entrySHA256: entrySHA,
+                        destination: destination
+                    )
+                }.value
+                clearQuarantineAndSign(destination.path)
+                return
+            } catch {
+                lastError = error
+            }
+        }
+        throw lastError
+    }
+
+    private func downloadTool(from url: URL, label: String) async throws -> Data {
+        toolProgress = "Getting \(label)…"
+        var request = URLRequest(url: url, timeoutInterval: 180)
+        request.setValue("Flump", forHTTPHeaderField: "User-Agent")
+        return try await withCheckedThrowingContinuation { continuation in
+            let fetch = ToolFetch(
+                onProgress: { [weak self] fraction in
+                    let percent = min(100, max(0, Int((fraction * 100).rounded())))
+                    Task { @MainActor in
+                        self?.toolProgress = "Getting \(label)… \(percent)%"
+                    }
+                },
+                onFinish: { [weak self] result in
+                    Task { @MainActor in
+                        self?.toolSession?.finishTasksAndInvalidate()
+                        self?.toolSession = nil
+                        self?.toolFetch = nil
+                        continuation.resume(with: result)
+                    }
+                }
             )
-        }.value
-        clearQuarantineAndSign(destination.path)
+            let session = URLSession(configuration: .default, delegate: fetch, delegateQueue: nil)
+            toolFetch = fetch
+            toolSession = session
+            session.downloadTask(with: request).resume()
+        }
     }
 
     private func clearQuarantineAndSign(_ path: String) {
@@ -678,6 +766,69 @@ final class Library: ObservableObject {
                 source: (dict["source"] as? String) ?? "paste",
                 createdAt: (dict["created_at"] as? NSNumber)?.doubleValue ?? Date().timeIntervalSince1970
             )
+        }
+    }
+}
+
+/// Downloads one pinned tool and reports a fraction when the server sends a length.
+private final class ToolFetch: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable (Double) -> Void
+    private let onFinish: @Sendable (Result<Data, Error>) -> Void
+    private let lock = NSLock()
+    private var finished = false
+
+    init(
+        onProgress: @escaping @Sendable (Double) -> Void,
+        onFinish: @escaping @Sendable (Result<Data, Error>) -> Void
+    ) {
+        self.onProgress = onProgress
+        self.onFinish = onFinish
+    }
+
+    private func finish(_ result: Result<Data, Error>) {
+        lock.lock()
+        if finished {
+            lock.unlock()
+            return
+        }
+        finished = true
+        lock.unlock()
+        onFinish(result)
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didWriteData bytesWritten: Int64,
+        totalBytesWritten: Int64,
+        totalBytesExpectedToWrite: Int64
+    ) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        onProgress(Double(totalBytesWritten) / Double(totalBytesExpectedToWrite))
+    }
+
+    func urlSession(
+        _ session: URLSession,
+        downloadTask: URLSessionDownloadTask,
+        didFinishDownloadingTo location: URL
+    ) {
+        let code = (downloadTask.response as? HTTPURLResponse)?.statusCode ?? 0
+        guard (200..<300).contains(code) else {
+            finish(.failure(ToolError.network))
+            return
+        }
+        do {
+            finish(.success(try Data(contentsOf: location)))
+        } catch {
+            finish(.failure(ToolError.network))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure(error))
+        } else {
+            finish(.failure(ToolError.network))
         }
     }
 }

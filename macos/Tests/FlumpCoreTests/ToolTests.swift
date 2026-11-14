@@ -13,6 +13,57 @@ final class ToolTests: XCTestCase {
         )
         XCTAssertEqual(tools["deno"]?.zipEntry, "deno")
         XCTAssertEqual(tools["deno"]?.sha256.count, 64)
+        XCTAssertEqual(tools["ffmpeg"]?.urls.count, 2)
+        XCTAssertEqual(
+            tools["ffmpeg"]?.urls.last,
+            "https://github.com/sung-park/flump/releases/download/v0.1.1/ffmpeg902arm.zip"
+        )
+    }
+
+    func testVersionCompare() {
+        XCTAssertTrue(toolVersionIsNewer("2026.10.26", than: "2026.10.21"))
+        XCTAssertFalse(toolVersionIsNewer("2026.10.26", than: "2026.10.26"))
+        XCTAssertTrue(toolVersionIsNewer("2026.11.04.071645", than: "2026.10.26"))
+        XCTAssertFalse(toolVersionIsNewer("2026.10.26", than: "2026.11.04.071645"))
+        XCTAssertEqual(toolVersionLine("2026.10.26\n"), "2026.10.26")
+        XCTAssertNil(toolVersionLine("not a version"))
+    }
+
+    func testSeedReplacesOnlyAnOlderCopy() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = root.appendingPathComponent("source")
+        let dest = root.appendingPathComponent("bin/yt-dlp")
+        try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("bundle".utf8).write(to: source)
+        try Data("installed".utf8).write(to: dest)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: source.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: dest.path)
+
+        XCTAssertFalse(try seedExecutable(
+            from: source.path,
+            to: dest,
+            sourceVersion: "2026.10.26",
+            destinationVersion: "2026.11.04"
+        ))
+        XCTAssertEqual(try String(contentsOf: dest, encoding: .utf8), "installed")
+
+        XCTAssertFalse(try seedExecutable(
+            from: source.path,
+            to: dest,
+            sourceVersion: "2026.10.26",
+            destinationVersion: "2026.10.26"
+        ))
+        XCTAssertEqual(try String(contentsOf: dest, encoding: .utf8), "installed")
+
+        XCTAssertTrue(try seedExecutable(
+            from: source.path,
+            to: dest,
+            sourceVersion: "2026.10.26",
+            destinationVersion: "2026.10.21"
+        ))
+        XCTAssertEqual(try String(contentsOf: dest, encoding: .utf8), "bundle")
     }
 
     func testUpdateIsDueUntilARecentCheck() {

@@ -2,9 +2,7 @@
 
 Flump는 Mac용 무료 오픈 소스 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 프론트엔드입니다. Downie 대신 쓸 수 있습니다. 페이지 링크를 붙여 넣으면 MP4나 MP3로 저장합니다. YouTube, Vimeo, X와 yt-dlp가 지원하는 다른 사이트가 해당됩니다. SwiftUI 앱이고, macOS 14 이상, Apple Silicon, MIT 라이선스입니다.
 
-검색할 때는 **Flump yt-dlp Mac**을 함께 쓰세요.
-
-자세한 설명은 [README.md](README.md)에 있습니다. 앱은 [`release/Flump-0.1.1-macos-arm64.zip`](release/Flump-0.1.1-macos-arm64.zip)입니다.
+자세한 설명은 [README.md](README.md)에 있습니다. 앱은 [GitHub Release](https://github.com/sung-park/flump/releases/latest)에 있습니다.
 
 링크는 이 Mac 안에만 있습니다. 받은 파일은 `~/Downloads/Flump`에 저장됩니다.
 

@@ -10,3 +10,5 @@ downloads/
 *.part
 macos/.build/
 .build/
+release/*.zip
+release/*.sha256

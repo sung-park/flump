@@ -2,8 +2,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-version="0.1.1"
-build_number="2"
+version="0.1.2"
+build_number="3"
 cd "$root/macos"
 swift test
 swift build -c release
@@ -14,6 +14,7 @@ rm -rf "$app"
 mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
 cp "$bin/Flump" "$app/Contents/MacOS/Flump"
 chmod +x "$app/Contents/MacOS/Flump"
+cp -R "$bin/Flump_FlumpCore.bundle" "$app/Contents/Resources/Flump_FlumpCore.bundle"
 
 cat > "$app/Contents/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>

@@ -2,17 +2,15 @@
 
 Flump is a free, open-source [yt-dlp](https://github.com/yt-dlp/yt-dlp) front-end for Mac, and a Downie alternative. Paste a page link — YouTube, Vimeo, X, and the other sites yt-dlp supports — and save MP4 or MP3. Native SwiftUI app. macOS 14 or later. Apple Silicon. MIT License.
 
-Search for **Flump yt-dlp Mac**.
-
 The link stays on your machine. A small creature, a link, and a file that lands in your Downloads folder.
 
 ![Flump](assets/window.png)
 
 ## Download
 
-The Mac app is in [`release/`](release/) and on the [GitHub release](https://github.com/sung-park/flump/releases/latest):
+The Mac app is on the [GitHub release](https://github.com/sung-park/flump/releases/latest):
 
-- [Flump-0.1.1-macos-arm64.zip](release/Flump-0.1.1-macos-arm64.zip)
+- [Flump-0.1.2-macos-arm64.zip](https://github.com/sung-park/flump/releases/download/v0.1.2/Flump-0.1.2-macos-arm64.zip)
 
 Unzip it and open `Flump.app`. The build is ad-hoc signed, so the first time macOS may refuse it. Right-click the app, choose Open, or run:
 
@@ -36,9 +34,9 @@ Open Flump, paste the page link, and press Save. One link, several links, or a s
 
 ## Does Flump need ffmpeg?
 
-Higher resolutions need ffmpeg, because the picture and the sound arrive as two files and have to be joined. Without ffmpeg, Flump saves one file that already contains both, which on YouTube is a much lower resolution. Audio-only saves need ffmpeg too. Choose **Get ffmpeg** in the app, or run `brew install ffmpeg`. The copy Flump downloads is GPL software from [osxexperts.net](https://www.osxexperts.net/) and stays on this Mac.
+Higher resolutions need ffmpeg, because the picture and the sound arrive as two files and have to be joined. Without ffmpeg, Flump saves one file that already contains both, which on YouTube is a much lower resolution. Audio-only saves need ffmpeg too. Choose **Get ffmpeg** in the app, or run `brew install ffmpeg`. The copy Flump downloads is GPL software from [osxexperts.net](https://www.osxexperts.net/) and stays on this Mac. The checksum is pinned. If that file name changes, Flump tries the same zip on the [v0.1.1 release](https://github.com/sung-park/flump/releases/download/v0.1.1/ffmpeg902arm.zip).
 
-YouTube also needs a JavaScript runtime. Choose **Get Deno**, or install Node or Deno yourself. Passing `--js-runtimes node` with no Node installed does nothing, so Flump only passes a runtime it has actually found.
+YouTube also needs a JavaScript runtime. Choose **Get Deno**, or install Node or Deno yourself.
 
 ## Flump vs Downie vs the yt-dlp command
 
@@ -46,7 +44,7 @@ YouTube also needs a JavaScript runtime. Choose **Get Deno**, or install Node or
 | --- | --- | --- | --- |
 | Price | Free, MIT | Paid | Free |
 | How you use it | Mac window | Mac window | Terminal |
-| Engine | yt-dlp | Its own | yt-dlp |
+| Engine | yt-dlp | — | yt-dlp |
 | Updates to the engine | The app updates its own yt-dlp | App updates | You update the command |
 
 Flump is the window. yt-dlp is the part that understands each site.
@@ -70,7 +68,7 @@ Flump is the window. yt-dlp is the part that understands each site.
 open dist/Flump.app
 ```
 
-The script runs the tests, builds the app, downloads yt-dlp 2026.10.26, checks it against the release SHA-256, and writes the zip in `release/`.
+The script runs the tests, builds the app, downloads yt-dlp 2026.10.26, checks it against the release SHA-256, and writes a zip under `release/`. Git ignores that zip. The copy people download is the GitHub release.
 
 There is also a local browser UI, if you want it:
 
@@ -82,6 +80,8 @@ python -m flump
 ```
 
 ## Development
+
+Flump passes `--js-runtimes` only when it has found Node or Deno. A bare `--js-runtimes node` does nothing if Node is not installed.
 
 ```bash
 cd macos && swift test

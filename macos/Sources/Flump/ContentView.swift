@@ -20,7 +20,7 @@ struct ContentView: View {
                         .foregroundStyle(.primary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                     if let button = note.button {
-                        Button(library.installingTools ? "Getting tools…" : button) {
+                        Button(library.installingTools ? (library.toolProgress ?? "Getting tools…") : button) {
                             library.installMissingTools()
                         }
                         .disabled(library.installingTools)

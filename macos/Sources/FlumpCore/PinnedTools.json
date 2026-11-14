@@ -7,6 +7,7 @@
   "ffmpeg": {
     "version": "9.0.2",
     "url": "https://www.osxexperts.net/ffmpeg902arm.zip",
+    "mirrors": ["https://github.com/sung-park/flump/releases/download/v0.1.1/ffmpeg902arm.zip"],
     "sha256": "4597f0f3a397cc0027bfd03dc4dd9c3066be15943cc788370846b4305d178bcb",
     "zipEntry": "ffmpeg",
     "entrySHA256": "6deb2860c3dc0c08e0f96bab119196c024103046fa3cc7ef72e3a77797d8553c"
