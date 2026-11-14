@@ -22,18 +22,12 @@ struct ContentView: View {
                     .background(.yellow.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
             }
             composer
-            Text("Put each link on its own line. Flump also finds links inside a sentence. You can drop a link on the window.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
             if library.jobs.isEmpty && library.history.isEmpty {
-                Spacer()
-                ContentUnavailableView {
-                    Label("Add a link", systemImage: "film")
-                } description: {
-                    Text("Paste a YouTube, Vimeo, or other video page and Flump saves it.")
-                }
-                Spacer()
+                EmptyStage(dropping: dropping)
             } else {
+                Text("Put each link on its own line. Flump also finds links inside a sentence. You can drop a link on the window.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
                 List {
                     if !library.jobs.isEmpty {
                         Section("Now") {
@@ -66,7 +60,7 @@ struct ContentView: View {
         .padding(20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .overlay {
-            if dropping {
+            if dropping && !(library.jobs.isEmpty && library.history.isEmpty) {
                 RoundedRectangle(cornerRadius: 16)
                     .strokeBorder(.blue, style: StrokeStyle(lineWidth: 2, dash: [8, 6]))
                     .padding(8)
@@ -200,6 +194,107 @@ struct ContentView: View {
             }
         }
         return accepted
+    }
+}
+
+private struct EmptyStage: View {
+    @EnvironmentObject private var library: Library
+    let dropping: Bool
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 12) {
+                Image(nsImage: NSApp.applicationIconImage)
+                    .resizable()
+                    .frame(width: 72, height: 72)
+                    .shadow(color: .black.opacity(0.28), radius: 10, y: 4)
+                Text(dropping ? "Drop to save" : "Drop a link here")
+                    .font(.title3.weight(.semibold))
+                Text("Paste a YouTube, Vimeo, or other video page. One link per line, or drop it on this window.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.top, 28)
+            .padding(.horizontal, 24)
+
+            HStack(alignment: .top, spacing: 12) {
+                guide(symbol: "doc.on.clipboard", title: "Paste", detail: "A page link, or several")
+                guide(symbol: "square.and.arrow.down", title: "Drop", detail: "Onto this window")
+                guide(symbol: "film", title: "Save", detail: "\(presetLabel) into your folder")
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 22)
+
+            Spacer(minLength: 16)
+
+            Button(action: library.openDownloadFolder) {
+                HStack(spacing: 8) {
+                    Image(systemName: "folder")
+                    Text("Saves to \(folderLabel)")
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    Spacer(minLength: 8)
+                    Image(systemName: "arrow.up.forward")
+                        .foregroundStyle(.tertiary)
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 11)
+                .frame(maxWidth: .infinity)
+                .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+            .buttonStyle(.plain)
+            .help("Open the save folder")
+            .padding(.horizontal, 16)
+            .padding(.bottom, 16)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(dropping ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.045))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(
+                    dropping ? Color.accentColor : Color.primary.opacity(0.16),
+                    style: StrokeStyle(lineWidth: dropping ? 2 : 1, dash: [8, 6])
+                )
+        }
+        .animation(.easeOut(duration: 0.15), value: dropping)
+    }
+
+    private func guide(symbol: String, title: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: symbol)
+                .font(.body.weight(.semibold))
+                .foregroundStyle(Color.accentColor)
+            Text(title)
+                .font(.callout.weight(.semibold))
+            Text(detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .padding(12)
+        .background(Color.primary.opacity(0.05), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    private var presetLabel: String {
+        presets.first { $0.id == library.settings.preset }?.label ?? "Best MP4"
+    }
+
+    private var folderLabel: String {
+        let path = (library.settings.downloadDir as NSString).expandingTildeInPath
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        if path == home || path.hasPrefix(home + "/") {
+            return "~" + path.dropFirst(home.count)
+        }
+        return path
     }
 }
 
