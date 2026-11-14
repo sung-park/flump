@@ -8,7 +8,7 @@ let package = Package(
         .executable(name: "Flump", targets: ["Flump"])
     ],
     targets: [
-        .target(name: "FlumpCore"),
+        .target(name: "FlumpCore", resources: [.process("PinnedTools.json")]),
         .executableTarget(name: "Flump", dependencies: ["FlumpCore"]),
         .testTarget(name: "FlumpCoreTests", dependencies: ["FlumpCore"]),
     ]

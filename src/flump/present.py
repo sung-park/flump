@@ -51,7 +51,7 @@ def clean_message(message: str) -> str:
 
 
 def humanize_error(message: str) -> str:
-    """A short Korean reason. The original text stays available as detail."""
+    """A short reason shown in the window. The original text stays available as detail."""
     low = clean_message(message).lower()
     if not low:
         return "Couldn't save that."

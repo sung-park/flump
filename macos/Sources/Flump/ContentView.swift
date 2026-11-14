@@ -14,12 +14,24 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             if let note = toolNote {
-                Text(note)
-                    .font(.callout)
-                    .foregroundStyle(.primary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(.yellow.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(note.message)
+                        .font(.callout)
+                        .foregroundStyle(.primary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if let button = note.button {
+                        Button(library.installingTools ? "Getting tools…" : button) {
+                            library.installMissingTools()
+                        }
+                        .disabled(library.installingTools)
+                        Text("ffmpeg is GPL software. Deno is its own runtime. Both stay on this Mac.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(.yellow.opacity(0.18), in: RoundedRectangle(cornerRadius: 10))
             }
             composer
             if library.jobs.isEmpty && library.history.isEmpty {
@@ -144,18 +156,27 @@ struct ContentView: View {
         }
     }
 
-    private var toolNote: String? {
+    private var toolNote: ToolNote? {
         var notes: [String] = []
         if library.ytDlpPath == nil {
             notes.append("yt-dlp is missing. Run brew install yt-dlp.")
         }
-        if library.ffmpegPath == nil {
-            notes.append("ffmpeg is missing. Run brew install ffmpeg to merge video and audio, or to save audio only.")
+        let missing = library.missingToolIDs()
+        if missing.contains("ffmpeg") {
+            notes.append("Without ffmpeg, YouTube saves stay at a low resolution.")
         }
-        if library.jsRuntime == nil {
-            notes.append("YouTube needs Node. Install it from https://nodejs.org.")
+        if missing.contains("deno") {
+            notes.append("YouTube needs a JavaScript runtime.")
         }
-        return notes.isEmpty ? nil : notes.joined(separator: " ")
+        guard !notes.isEmpty else { return nil }
+        let button: String?
+        switch missing {
+        case ["ffmpeg", "deno"]: button = "Get ffmpeg and Deno"
+        case ["ffmpeg"]: button = "Get ffmpeg"
+        case ["deno"]: button = "Get Deno"
+        default: button = nil
+        }
+        return ToolNote(message: notes.joined(separator: " "), button: button)
     }
 
     private func submit() {
@@ -296,6 +317,11 @@ private struct EmptyStage: View {
         }
         return path
     }
+}
+
+private struct ToolNote {
+    let message: String
+    let button: String?
 }
 
 private struct JobRow: View {

@@ -170,12 +170,8 @@ private func sanitizeFileTitle(_ title: String) -> String {
 
 private func commonArguments(jsRuntimes: [String]) -> [String] {
     var args = ["--no-colors", "--no-warnings"]
-    if jsRuntimes.isEmpty {
-        args += ["--js-runtimes", "node"]
-    } else {
-        for runtime in jsRuntimes {
-            args += ["--js-runtimes", runtime]
-        }
+    for runtime in jsRuntimes where !runtime.isEmpty {
+        args += ["--js-runtimes", runtime]
     }
     return args
 }
@@ -310,7 +306,10 @@ public func humanizeError(_ message: String) -> String {
         return "This video needs a login. Turn on browser cookies in Settings."
     }
     if low.contains("ffmpeg") || low.contains("merging of multiple formats") {
-        return "ffmpeg is required. Run brew install ffmpeg."
+        return "ffmpeg is required. Choose Get ffmpeg, or run brew install ffmpeg."
+    }
+    if low.contains("javascript runtime") || low.contains("js runtime") {
+        return "YouTube needs a JavaScript runtime. Choose Get Deno."
     }
     if low.contains("not available in your country") || low.contains("geo") {
         return "This video isn't available in your region."
@@ -499,9 +498,10 @@ private func duration(from info: [String: Any]) -> String? {
     return formatDuration(number.doubleValue)
 }
 
-public func locateTool(_ name: String, bundlePath: String? = nil, path: String? = nil) -> String? {
-    if let bundlePath, FileManager.default.isExecutableFile(atPath: bundlePath) {
-        return bundlePath
+public func locateTool(_ name: String, binDirectory: URL? = nil, path: String? = nil) -> String? {
+    let managed = (binDirectory ?? flumpBinDirectory()).appendingPathComponent(name).path
+    if FileManager.default.isExecutableFile(atPath: managed) {
+        return managed
     }
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let candidates = [
@@ -519,6 +519,7 @@ public func locateTool(_ name: String, bundlePath: String? = nil, path: String? 
 public func extendedPath() -> String {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     return [
+        flumpBinDirectory().path,
         "/opt/homebrew/bin",
         "/usr/local/bin",
         "\(home)/.local/bin",

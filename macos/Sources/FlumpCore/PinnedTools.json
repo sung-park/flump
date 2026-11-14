@@ -1,0 +1,20 @@
+{
+  "yt-dlp": {
+    "version": "2026.10.26",
+    "url": "https://github.com/yt-dlp/yt-dlp/releases/download/2026.10.26/yt-dlp_macos",
+    "sha256": "0f922c15ccc0b83eefa1c8bc9104e434318c4bf16e408e1ee93b7745a6efe0aa"
+  },
+  "ffmpeg": {
+    "version": "9.0.2",
+    "url": "https://www.osxexperts.net/ffmpeg902arm.zip",
+    "sha256": "4597f0f3a397cc0027bfd03dc4dd9c3066be15943cc788370846b4305d178bcb",
+    "zipEntry": "ffmpeg",
+    "entrySHA256": "6deb2860c3dc0c08e0f96bab119196c024103046fa3cc7ef72e3a77797d8553c"
+  },
+  "deno": {
+    "version": "2.9.8",
+    "url": "https://github.com/denoland/deno/releases/download/v2.9.8/deno-aarch64-apple-darwin.zip",
+    "sha256": "9f0bf660393da2eaff044cdc7444cb08c73f235849b61d224d825a194ce7c98e",
+    "zipEntry": "deno"
+  }
+}

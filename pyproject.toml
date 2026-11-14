@@ -1,7 +1,7 @@
 [project]
 name = "flump"
-version = "0.1.0"
-description = "Paste a page URL and download the video. A local, open-source Downie-style app."
+version = "0.1.1"
+description = "Free open-source yt-dlp front-end for Mac. Paste a page link and save the video. A Downie alternative."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

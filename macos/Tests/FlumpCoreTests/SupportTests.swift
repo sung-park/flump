@@ -151,5 +151,6 @@ final class SupportTests: XCTestCase {
         XCTAssertEqual(built.arguments[output + 1], "Sample 100 [%(id)s].%(ext)s")
         let probe = probeArguments(jsRuntimes: [], referer: "https://example.com/watch")
         XCTAssertTrue(probe.contains("--referer"))
+        XCTAssertFalse(probe.contains("--js-runtimes"))
     }
 }

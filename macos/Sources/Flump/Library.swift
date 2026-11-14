@@ -41,11 +41,6 @@ struct MediaJob: Identifiable, Equatable {
     }
 }
 
-private enum Work {
-    case probe(String)
-    case download(String)
-}
-
 @MainActor
 final class Library: ObservableObject {
     @Published var jobs: [MediaJob] = []
@@ -56,10 +51,9 @@ final class Library: ObservableObject {
     @Published var ytDlpPath: String?
     @Published var ffmpegPath: String?
     @Published var jsRuntime: String?
+    @Published var installingTools = false
 
-    private var queue: [Work] = []
-    private var draining = false
-    private var active = 0
+    private let scheduler: LaneScheduler
     private var sessions: [String: YtDlpSession] = [:]
     private var cancelled: Set<String> = []
     private var recent: [String: Date] = [:]
@@ -70,26 +64,43 @@ final class Library: ObservableObject {
     private let historyURL: URL
 
     init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Flump", isDirectory: true)
+        let base = flumpSupportDirectory()
         supportURL = base
         settingsURL = base.appendingPathComponent("settings.json")
         historyURL = base.appendingPathComponent("history.json")
         try? FileManager.default.createDirectory(at: base, withIntermediateDirectories: true)
         let downloads = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Downloads/Flump", isDirectory: true)
-        settings = Self.loadSettings(from: settingsURL, fallback: downloads.path)
+        let loaded = Self.loadSettings(from: settingsURL, fallback: downloads.path)
+        settings = loaded
+        scheduler = LaneScheduler(probeLimit: loaded.concurrent, downloadLimit: loaded.concurrent)
         try? FileManager.default.createDirectory(atPath: settings.downloadDir, withIntermediateDirectories: true)
         history = Self.loadHistory(from: historyURL)
-        refreshTools()
         timer = Timer.scheduledTimer(withTimeInterval: 1.2, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.pollClipboard() }
         }
+        scheduler.runProbe = { [weak self] id in
+            await self?.probe(id)
+        }
+        scheduler.runDownload = { [weak self] id in
+            await self?.download(id)
+        }
+        refreshTools()
+        Task { await self.updateYtDlpIfDue() }
+    }
+
+    func missingToolIDs() -> [String] {
+        var ids: [String] = []
+        if ffmpegPath == nil { ids.append("ffmpeg") }
+        if jsRuntime == nil { ids.append("deno") }
+        return ids
     }
 
     func refreshTools() {
-        let bundle = Bundle.main.resourceURL?.appendingPathComponent("yt-dlp").path
-        ytDlpPath = locateTool("yt-dlp", bundlePath: bundle)
+        if let bundle = Bundle.main.resourceURL?.appendingPathComponent("yt-dlp").path {
+            _ = try? seedExecutable(from: bundle, to: flumpBinDirectory().appendingPathComponent("yt-dlp"))
+        }
+        ytDlpPath = locateTool("yt-dlp")
         ffmpegPath = locateTool("ffmpeg")
         if let node = locateTool("node") {
             jsRuntime = node
@@ -97,6 +108,28 @@ final class Library: ObservableObject {
             jsRuntime = deno
         } else {
             jsRuntime = nil
+        }
+    }
+
+    func installMissingTools() {
+        let ids = missingToolIDs()
+        guard !installingTools, !ids.isEmpty else { return }
+        installingTools = true
+        Task {
+            defer { installingTools = false }
+            do {
+                for id in ids {
+                    guard let tool = pinnedTool(id) else { continue }
+                    try await fetchAndInstall(tool)
+                }
+                refreshTools()
+            } catch let error as ToolError {
+                alert = error == .checksum
+                    ? "The download didn't match its published checksum."
+                    : "Couldn't install the tools. Check the network and try again."
+            } catch {
+                alert = "Couldn't install the tools. Check the network and try again."
+            }
         }
     }
 
@@ -138,7 +171,7 @@ final class Library: ObservableObject {
     func cancel(id: String) {
         cancelled.insert(id)
         sessions[id]?.cancel()
-        queue.removeAll { workID($0) == id }
+        scheduler.cancel(id)
         update(id) { job in
             if job.isActive || job.status == "review" || job.status == "queued" {
                 job.status = "cancelled"
@@ -234,6 +267,7 @@ final class Library: ObservableObject {
         if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.prettyPrinted, .sortedKeys]) {
             try? data.write(to: settingsURL)
         }
+        scheduler.setLimits(probe: settings.concurrent, download: settings.concurrent)
     }
 
     func clearHistory() {
@@ -268,35 +302,10 @@ final class Library: ObservableObject {
         )
         jobs.append(job)
         recent[url] = Date()
-        queue.append(known ? .download(job.id) : .probe(job.id))
-        pump()
-    }
-
-    private func pump() {
-        if draining { return }
-        draining = true
-        Task { await drain() }
-    }
-
-    private func drain() async {
-        while active < settings.concurrent, !queue.isEmpty {
-            let work = queue.removeFirst()
-            let id = workID(work)
-            if cancelled.contains(id) { continue }
-            active += 1
-            await perform(work)
-            active -= 1
-        }
-        draining = false
-        if !queue.isEmpty { pump() }
-    }
-
-    private func perform(_ work: Work) async {
-        switch work {
-        case .probe(let id):
-            await probe(id)
-        case .download(let id):
-            await download(id)
+        if known {
+            scheduler.enqueueDownload(job.id)
+        } else {
+            scheduler.enqueueProbe(job.id)
         }
     }
 
@@ -372,7 +381,7 @@ final class Library: ObservableObject {
                 }
                 job.status = "queued"
             }
-            queue.append(.download(id))
+            scheduler.enqueueDownload(id)
         } catch {
             fail(id, detail: error.localizedDescription)
         }
@@ -527,10 +536,64 @@ final class Library: ObservableObject {
         return args
     }
 
-    private func workID(_ work: Work) -> String {
-        switch work {
-        case .probe(let id), .download(let id): return id
+    private func updateYtDlpIfDue() async {
+        let binary = flumpBinDirectory().appendingPathComponent("yt-dlp").path
+        guard FileManager.default.isExecutableFile(atPath: binary) else { return }
+        let stampURL = supportURL.appendingPathComponent("yt-dlp-checked")
+        let stamp = readStamp(stampURL)
+        guard ytDlpUpdateIsDue(checkedAt: stamp, now: Date()) else { return }
+        let code = await Task.detached(priority: .utility) {
+            runTool(binary, arguments: ["--update-to", "stable"])
+        }.value
+        guard code == 0 else { return }
+        let text = String(Date().timeIntervalSince1970)
+        try? text.write(to: stampURL, atomically: true, encoding: .utf8)
+        refreshTools()
+    }
+
+    private func readStamp(_ url: URL) -> Date? {
+        guard let text = try? String(contentsOf: url, encoding: .utf8),
+              let seconds = TimeInterval(text.trimmingCharacters(in: .whitespacesAndNewlines)) else {
+            return nil
         }
+        return Date(timeIntervalSince1970: seconds)
+    }
+
+    private func fetchAndInstall(_ tool: PinnedTool) async throws {
+        guard let url = URL(string: tool.url) else { throw ToolError.archive }
+        var request = URLRequest(url: url, timeoutInterval: 180)
+        request.setValue("Flump", forHTTPHeaderField: "User-Agent")
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            throw ToolError.network
+        }
+        let destination = flumpBinDirectory().appendingPathComponent(tool.id)
+        let sha = tool.sha256
+        let entry = tool.zipEntry
+        let entrySHA = tool.entrySHA256
+        try await Task.detached(priority: .utility) {
+            try installDownloadedTool(
+                data: data,
+                sha256: sha,
+                zipEntry: entry,
+                entrySHA256: entrySHA,
+                destination: destination
+            )
+        }.value
+        clearQuarantineAndSign(destination.path)
+    }
+
+    private func clearQuarantineAndSign(_ path: String) {
+        let clear = Process()
+        clear.executableURL = URL(fileURLWithPath: "/usr/bin/xattr")
+        clear.arguments = ["-cr", path]
+        try? clear.run()
+        clear.waitUntilExit()
+        let sign = Process()
+        sign.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        sign.arguments = ["--force", "--sign", "-", path]
+        try? sign.run()
+        sign.waitUntilExit()
     }
 
     private func pollClipboard() {
