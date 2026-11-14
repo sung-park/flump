@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex">
+  <title>Flump</title>
+  <link rel="icon" href="/static/favicon.svg">
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="top">
+      <div class="brand">
+        <img src="/static/favicon.svg" width="28" height="28" alt="">
+        <div>
+          <h1>Flump</h1>
+          <p>Paste a page link and Flump saves the video.</p>
+        </div>
+      </div>
+      <div class="top-actions">
+        <button type="button" id="open-folder" class="icon-button" title="Open the save folder" aria-label="Open the save folder">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H9l2 2h7.5A2.5 2.5 0 0 1 21 9.5v7A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5v-9Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="button" id="open-settings" class="icon-button" title="Settings" aria-label="Settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15.2a3.2 3.2 0 1 0 0-6.4 3.2 3.2 0 0 0 0 6.4Z" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M19.4 13.5a7.7 7.7 0 0 0 .05-1.5 7.7 7.7 0 0 0-.05-1.5l2-1.55-2-3.46-2.4.7a7.8 7.8 0 0 0-2.6-1.5L14 2h-4l-.4 2.7a7.8 7.8 0 0 0-2.6 1.5l-2.4-.7-2 3.46L4.6 10.5a7.7 7.7 0 0 0 0 3L2.6 15.05l2 3.46 2.4-.7a7.8 7.8 0 0 0 2.6 1.5L10 22h4l.4-2.7a7.8 7.8 0 0 0 2.6-1.5l2.4.7 2-3.46-2-1.54Z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <p id="ffmpeg" class="banner" hidden></p>
+
+    <form id="composer" class="composer">
+      <label class="sr" for="url">Video link</label>
+      <textarea id="url" rows="1" placeholder="Paste a video link" spellcheck="false" autofocus></textarea>
+      <button type="submit" id="get">Save</button>
+    </form>
+    <p class="hint">Put each link on its own line. Flump also finds links inside a sentence. You can drop a link on the window.</p>
+
+    <section id="jobs-wrap" hidden>
+      <h2>Now</h2>
+      <div id="jobs" class="list"></div>
+    </section>
+
+    <section id="history-wrap" hidden>
+      <div class="section-head">
+        <h2>Saved</h2>
+        <button type="button" id="clear-history" class="text-button">Clear list</button>
+      </div>
+      <div id="history" class="list"></div>
+    </section>
+
+    <section id="empty" class="empty">
+      <p>Paste a YouTube, Vimeo, or other video page.</p>
+    </section>
+
+    <footer>
+      <p>Only save videos you have the right to save. Links stay on this Mac.</p>
+    </footer>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <div id="drop" hidden>Drop to save</div>
+
+  <dialog id="settings">
+    <form method="dialog" id="settings-form">
+      <header class="dialog-head">
+        <h2>Settings</h2>
+        <button type="submit" class="text-button" value="close">Close</button>
+      </header>
+
+      <label class="field">
+        <span>Save folder</span>
+        <input id="download-dir" type="text" autocomplete="off" spellcheck="false">
+      </label>
+      <div class="row-actions">
+        <button type="button" id="pick-folder" class="secondary">Choose folder</button>
+        <button type="button" id="settings-open-folder" class="secondary">Open folder</button>
+      </div>
+
+      <label class="field">
+        <span>Quality</span>
+        <select id="preset"></select>
+      </label>
+
+      <label class="check">
+        <input id="subtitles" type="checkbox">
+        <span>Save subtitles when they exist</span>
+      </label>
+
+      <label class="check">
+        <input id="clipboard" type="checkbox">
+        <span>Save links copied to the clipboard</span>
+      </label>
+      <p class="field-help">This runs only when the clipboard is nothing but links.</p>
+
+      <fieldset>
+        <legend>At once</legend>
+        <div class="segmented" id="concurrent">
+          <label><input type="radio" name="concurrent" value="1"><span>1</span></label>
+          <label><input type="radio" name="concurrent" value="2"><span>2</span></label>
+          <label><input type="radio" name="concurrent" value="3"><span>3</span></label>
+        </div>
+      </fieldset>
+
+      <label class="field">
+        <span>Browser cookies</span>
+        <select id="cookies">
+          <option value="">Off</option>
+          <option value="safari">Safari</option>
+          <option value="chrome">Chrome</option>
+          <option value="whale">Whale</option>
+          <option value="firefox">Firefox</option>
+          <option value="edge">Edge</option>
+          <option value="brave">Brave</option>
+        </select>
+      </label>
+      <p class="field-help">Use this for videos that need a login. Cookies never leave this Mac.</p>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
